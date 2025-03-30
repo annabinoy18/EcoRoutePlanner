@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EV Route Planner</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <style>
+        body {
+            margin: 0;
+            padding: 20px;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background-color: #f0f2f5;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            display: grid;
+            grid-template-columns: 1fr 2fr;
+            gap: 20px;
+        }
+        .form-container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .map-container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            height: 600px;
+        }
+        #map {
+            height: 100%;
+            border-radius: 4px;
+        }
+        h1 {
+            color: #1a73e8;
+            margin-bottom: 24px;
+            text-align: center;
+        }
+        .input-group {
+            margin-bottom: 16px;
+        }
+        label {
+            display: block;
+            margin-bottom: 8px;
+            color: #5f6368;
+        }
+        input {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #dadce0;
+            border-radius: 4px;
+            margin-bottom: 8px;
+        }
+        button {
+            width: 100%;
+            padding: 12px;
+            background-color: #1a73e8;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: background-color 0.2s;
+        }
+        button:hover {
+            background-color: #1557b0;
+        }
+        .error {
+            color: #d93025;
+            margin-top: 8px;
+            font-size: 14px;
+        }
+        .route-info {
+            margin-top: 16px;
+            padding: 16px;
+            background-color: #e8f0fe;
+            border-radius: 4px;
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="form-container">
+            <h1>EV Route Planner</h1>
+            <form id="routeForm">
+                <div class="input-group">
+                    <h3>Starting Point</h3>
+                    <label for="startLatitude">Latitude</label>
+                    <input type="number" id="startLatitude" step="any" required>
+                    <label for="startLongitude">Longitude</label>
+                    <input type="number" id="startLongitude" step="any" required>
+                </div>
+
+                <div class="input-group">
+                    <h3>Destination</h3>
+                    <label for="destLatitude">Latitude</label>
+                    <input type="number" id="destLatitude" step="any" required>
+                    <label for="destLongitude">Longitude</label>
+                    <input type="number" id="destLongitude" step="any" required>
+                </div>
+
+                <div class="input-group">
+                    <h3>Vehicle Details</h3>
+                    <label for="battery">Battery Level (%)</label>
+                    <input type="number" id="battery" min="0" max="100" required>
+                    <label for="range">Range on Full Charge (km)</label>
+                    <input type="number" id="range" min="0" required>
+                </div>
+
+                <button type="submit">Plan Route</button>
+            </form>
+
+            <div id="error" class="error"></div>
+            <div id="routeInfo" class="route-info"></div>
+        </div>
+
+        <div class="map-container">
+            <div id="map"></div>
+        </div>
+    </div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script>
+        let map;
+        let routeLayer;
+
+        // Initialize the map
+        document.addEventListener('DOMContentLoaded', () => {
+            map = L.map('map').setView([0, 0], 2);
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '© OpenStreetMap contributors'
+            }).addTo(map);
+        });
+
+        document.getElementById('routeForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const errorDiv = document.getElementById('error');
+            const routeInfo = document.getElementById('routeInfo');
+            errorDiv.textContent = '';
+            routeInfo.style.display = 'none';
+
+            // Clear existing route from map
+            if (routeLayer) {
+                map.removeLayer(routeLayer);
+            }
+
+            const formData = {
+                startLatitude: parseFloat(document.getElementById('startLatitude').value),
+                startLongitude: parseFloat(document.getElementById('startLongitude').value),
+                destLatitude: parseFloat(document.getElementById('destLatitude').value),
+                destLongitude: parseFloat(document.getElementById('destLongitude').value),
+                battery: parseFloat(document.getElementById('battery').value),
+                range: parseFloat(document.getElementById('range').value)
+            };
+
+            try {
+                const response = await fetch('http://localhost:5000/plan_route', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json'
+                    },
+                    body: JSON.stringify(formData)
+                });
+
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.error || 'Failed to fetch route');
+                }
+
+                const data = await response.json();
+
+                // Display route information
+                routeInfo.innerHTML = `
+                    <h3>Route Details</h3>
+                    <p>Distance: ${data.distance.toFixed(2)} km</p>
+                    <p>Duration: ${data.duration}</p>
+                    <p>Estimated Battery Usage: ${data.battery_usage.toFixed(2)}%</p>
+                `;
+                routeInfo.style.display = 'block';
+
+                // Add markers for start and end points
+                const startMarker = L.marker([formData.startLatitude, formData.startLongitude])
+                    .addTo(map)
+                    .bindPopup('Start');
+                
+                const endMarker = L.marker([formData.destLatitude, formData.destLongitude])
+                    .addTo(map)
+                    .bindPopup('Destination');
+
+                // Create a bounds object and fit the map to it
+                const bounds = L.latLngBounds(
+                    [formData.startLatitude, formData.startLongitude],
+                    [formData.destLatitude, formData.destLongitude]
+                );
+                map.fitBounds(bounds, { padding: [50, 50] });
+
+                // Draw the route if steps are available
+                if (data.steps && data.steps.length > 0) {
+                    const routeCoordinates = data.steps.map(step => [
+                        step.start_location.lat,
+                        step.start_location.lng
+                    ]);
+                    routeCoordinates.push([
+                        data.steps[data.steps.length - 1].end_location.lat,
+                        data.steps[data.steps.length - 1].end_location.lng
+                    ]);
+
+                    routeLayer = L.polyline(routeCoordinates, {
+                        color: '#1a73e8',
+                        weight: 5,
+                        opacity: 0.7
+                    }).addTo(map);
+                }
+
+            } catch (error) {
+                errorDiv.textContent = error.message;
+                console.error('Error:', error);
+            }
+        });
+    </script>
+</body>
+</html>

@@ -23,7 +23,7 @@ model.load_state_dict(torch.load("dqn_ev_route.pth"))
 model.eval()
 
 # ✅ Google Maps API Key
-gmaps = googlemaps.Client(key="AIzaSyChLb_13Z8w_KwTuI0mntk1toqt5PNrQ0Y")
+gmaps = googlemaps.Client(key="GOOGLE_API_KEY")
 
 def get_routes(start, end):
     """Fetch possible routes from Google Maps Directions API."""

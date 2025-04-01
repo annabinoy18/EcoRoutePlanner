@@ -82,6 +82,26 @@
             border-radius: 4px;
             display: none;
         }
+        .warning {
+            color: #d93025;
+            margin-top: 16px;
+            font-size: 16px;
+        }
+        .speech-button {
+            background-color: #34a853;
+            margin-top: 16px;
+        }
+        .speech-button:hover {
+            background-color: #2c8e42;
+        }
+        .action-buttons {
+            display: flex;
+            gap: 10px;
+            margin-top: 10px;
+        }
+        .action-buttons button {
+            width: auto;
+        }
     </style>
 </head>
 <body>
@@ -118,6 +138,15 @@
 
             <div id="error" class="error"></div>
             <div id="routeInfo" class="route-info"></div>
+            <div id="warning" class="warning"></div>
+            <button id="readDirections" class="speech-button" style="display: none;">Read Directions Aloud</button>
+            
+            <div id="actionButtons" class="action-buttons" style="display: none;">
+                <button id="stopReading">Stop</button>
+                <button id="resumeReading" style="display: none;">Resume</button>
+                <button id="refreshReading">Restart</button>
+            </div>
+
         </div>
 
         <div class="map-container">
@@ -126,6 +155,7 @@
     </div>
 
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://unpkg.com/@mapbox/polyline@1.1.1/src/polyline.js"></script>
     <script>
         let map;
         let routeLayer;
@@ -138,12 +168,18 @@
             }).addTo(map);
         });
 
+        let directionsText = "";// Variable to store directions
+        let speechSynthesisUtterance;
+        let isReading = false;
+
         document.getElementById('routeForm').addEventListener('submit', async (e) => {
             e.preventDefault();
             const errorDiv = document.getElementById('error');
             const routeInfo = document.getElementById('routeInfo');
+            const warningDiv = document.getElementById('warning');
             errorDiv.textContent = '';
             routeInfo.style.display = 'none';
+            warningDiv.textContent = '';
 
             // Clear existing route from map
             if (routeLayer) {
@@ -160,7 +196,7 @@
             };
 
             try {
-                const response = await fetch('http://localhost:5000/plan_route', {
+                const response = await fetch('http://127.0.0.1:5000/plan_route', { // Change to your Flask route
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
@@ -177,13 +213,17 @@
                 const data = await response.json();
 
                 // Display route information
-                routeInfo.innerHTML = `
+                routeInfo.innerHTML = ` 
                     <h3>Route Details</h3>
                     <p>Distance: ${data.distance.toFixed(2)} km</p>
                     <p>Duration: ${data.duration}</p>
                     <p>Estimated Battery Usage: ${data.battery_usage.toFixed(2)}%</p>
                 `;
                 routeInfo.style.display = 'block';
+
+                // Set directionsText from backend response (HTML instructions for the route)
+                directionsText = data.steps.map(step => step.instructions).join(' ');
+                directionsText = directionsText.replace(/<[^>]*>/g, '');
 
                 // Add markers for start and end points
                 const startMarker = L.marker([formData.startLatitude, formData.startLongitude])
@@ -201,13 +241,32 @@
                 );
                 map.fitBounds(bounds, { padding: [50, 50] });
 
+                // Check if the battery is sufficient
+                if (data.battery_usage > formData.battery) {
+                    warningDiv.textContent = 'Warning: Insufficient battery for the trip. Consider charging your vehicle along the way.';
+                    // Load charging stations along the route if battery is insufficient
+                    //loadChargingStationsAlongRoute(formData.startLatitude, formData.startLongitude, formData.destLatitude, formData.destLongitude);
+                    fetchChargingStations(formData.startLatitude, formData.startLongitude);
+                    fetchChargingStations(formData.destLatitude, formData.destLongitude);
+
+                    const midpoint1Lat = (formData.startLatitude + formData.destLatitude) / 2;
+                    const midpoint1Lon = (formData.startLongitude + formData.destLongitude) / 2;
+                    const midpoint2Lat = (formData.startLatitude + midpoint1Lat) / 2;
+                    const midpoint2Lon = (formData.startLongitude + midpoint1Lon) / 2;
+
+                    fetchChargingStations(midpoint1Lat, midpoint1Lon); // First midpoint
+                    fetchChargingStations(midpoint2Lat, midpoint2Lon);
+                    console.log(directionsText);
+
+                }
+
                 // Draw the route if steps are available
                 if (data.steps && data.steps.length > 0) {
                     const routeCoordinates = data.steps.map(step => [
                         step.start_location.lat,
                         step.start_location.lng
                     ]);
-                    routeCoordinates.push([
+                    routeCoordinates.push([ 
                         data.steps[data.steps.length - 1].end_location.lat,
                         data.steps[data.steps.length - 1].end_location.lng
                     ]);
@@ -219,11 +278,73 @@
                     }).addTo(map);
                 }
 
+                // Show Read Directions button
+                document.getElementById('readDirections').style.display = 'inline-block';
+
             } catch (error) {
                 errorDiv.textContent = error.message;
                 console.error('Error:', error);
             }
         });
+
+        document.getElementById('readDirections').addEventListener('click', () => {
+            if (!isReading) {
+                speechSynthesisUtterance = new SpeechSynthesisUtterance(directionsText);
+                window.speechSynthesis.speak(speechSynthesisUtterance);
+                isReading = true;
+                document.getElementById('readDirections').style.display = 'block';
+                document.getElementById('actionButtons').style.display = 'flex';  // Show button container
+                document.getElementById('stopReading').style.display = 'block';
+                document.getElementById('resumeReading').style.display = 'none';  // Initially hidden
+                document.getElementById('refreshReading').style.display = 'block';
+
+            }
+            else {
+                // Stop button functionality
+                window.speechSynthesis.pause();
+                document.getElementById('stopReading').style.display = 'none';
+                document.getElementById('resumeReading').style.display = 'inline-block';
+            }
+        });
+
+        document.getElementById('stopReading').addEventListener('click', () => {
+            if (isReading) {
+                window.speechSynthesis.pause();
+                document.getElementById('stopReading').style.display = 'none';
+                document.getElementById('resumeReading').style.display = 'inline-block';
+            }
+        });
+
+        document.getElementById('resumeReading').addEventListener('click', () => {
+            if (isReading) {
+                window.speechSynthesis.resume();
+                document.getElementById('stopReading').style.display = 'inline-block';
+                document.getElementById('resumeReading').style.display = 'none';
+            }
+        });
+
+        document.getElementById('refreshReading').addEventListener('click', () => {
+            // Restart reading
+            if (isReading) {
+                window.speechSynthesis.cancel();
+                isReading = false;
+                document.getElementById('readDirections').click(); // Restart reading directions
+            }
+        });
+      // Load charging stations along the route
+        async function fetchChargingStations(lat, lon) {
+                let apiKey = "29cbedcb-3ac1-433b-ace7-62d66ebe90fa"; // Replace with a valid API key
+                let response = await fetch(`https://api.openchargemap.io/v3/poi/?output=json&latitude=${lat}&longitude=${lon}&maxresults=5&key=${apiKey}`);
+                let data = await response.json();
+
+                data.forEach(station => {
+                    let location = station.AddressInfo;
+                    L.marker([location.Latitude, location.Longitude])
+                        .addTo(map)
+                        .bindPopup(`<b>${location.Title}</b><br>${location.AddressLine1}`);
+                });
+            }
+
     </script>
 </body>
 </html>

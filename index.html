@@ -333,7 +333,7 @@
         });
       // Load charging stations along the route
         async function fetchChargingStations(lat, lon) {
-                let apiKey = "29cbedcb-3ac1-433b-ace7-62d66ebe90fa"; // Replace with a valid API key
+                let apiKey = "YOUR-OPENSTREETMAP-API"; // Replace with a valid API key
                 let response = await fetch(`https://api.openchargemap.io/v3/poi/?output=json&latitude=${lat}&longitude=${lon}&maxresults=5&key=${apiKey}`);
                 let data = await response.json();
 

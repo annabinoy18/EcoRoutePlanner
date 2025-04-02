@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EcoNav - Smart Routes for Electric Vehicles</title>
+    <link rel="stylesheet" href="style.css">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+        }
+
+        body {
+            min-height: 100vh;
+            background: linear-gradient(135deg, #EBF5FF 0%, #FFFFFF 50%, #E6F0FF 100%);
+        }
+
+        nav {
+            position: absolute;
+            top: 0;
+            width: 100%;
+            padding: 1.5rem;
+        }
+
+        .nav-container {
+            max-width: 80rem;
+            margin: 0 auto;
+        }
+
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .logo span {
+            font-size: 1.5rem;
+            font-weight: bold;
+            background: linear-gradient(to right, #2563EB, #60A5FA);
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+        }
+
+        .car-icon {
+            color: #2563EB;
+        }
+
+        .hero {
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 1rem;
+        }
+
+        .hero-content {
+            max-width: 64rem;
+            margin: 0 auto;
+            text-align: center;
+        }
+
+        .card {
+            position: relative;
+            margin-bottom: 4rem;
+        }
+
+        .card-blur {
+            position: absolute;
+            inset: -0.25rem;
+            background: linear-gradient(to right, #2563EB, #60A5FA);
+            border-radius: 0.5rem;
+            filter: blur(8px);
+            opacity: 0.3;
+        }
+
+        .card-content {
+            position: relative;
+            background: white;
+            border-radius: 0.5rem;
+            padding: 2rem;
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1);
+        }
+
+        .icon-container {
+            display: flex;
+            justify-content: center;
+            margin-bottom: 1.5rem;
+        }
+
+        .leaf-icon {
+            color: #3B82F6;
+        }
+
+        h1 {
+            font-size: 3rem;
+            font-weight: bold;
+            margin-bottom: 1.5rem;
+            background: linear-gradient(to right, #2563EB, #60A5FA);
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+        }
+
+        .card-content p {
+            color: #4B5563;
+            font-size: 1.25rem;
+            margin-bottom: 2rem;
+        }
+
+        .start-button {
+            display: inline-flex;
+            align-items: center;
+            padding: 1rem 2rem;
+            font-size: 1.125rem;
+            font-weight: 500;
+            color: white;
+            background: linear-gradient(to right, #2563EB, #60A5FA);
+            border: none;
+            border-radius: 9999px;
+            cursor: pointer;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+            transition: transform 0.3s ease;
+        }
+
+        .start-button:hover {
+            transform: scale(1.05);
+        }
+
+        .start-button span {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .chevron-icon {
+            transition: transform 0.3s ease;
+        }
+
+        .start-button:hover .chevron-icon {
+            transform: translateX(4px);
+        }
+
+        .features {
+            display: grid;
+            grid-template-columns: repeat(1, 1fr);
+            gap: 2rem;
+        }
+
+        @media (min-width: 768px) {
+            .features {
+                grid-template-columns: repeat(3, 1fr);
+            }
+
+            h1 {
+                font-size: 3.5rem;
+            }
+        }
+
+        .feature-card {
+            background: rgba(255, 255, 255, 0.8);
+            backdrop-filter: blur(8px);
+            padding: 1.5rem;
+            border-radius: 0.5rem;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        }
+
+        .feature-card h3 {
+            color: #2563EB;
+            font-size: 1.25rem;
+            font-weight: 600;
+            margin-bottom: 0.75rem;
+        }
+
+        .feature-card p {
+            color: #4B5563;
+        }
+    </style>
+
+</head>
+<body>
+    <nav>
+        <div class="nav-container">
+            <div class="logo">
+                <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="car-icon">
+                    <path d="M14 16H9m10 0h3v-3.15a1 1 0 0 0-.84-.99L16 11l-2.7-3.6a1 1 0 0 0-.8-.4H5.24a2 2 0 0 0-1.8 1.1l-.8 1.63A6 6 0 0 0 2 12.42V16h2"/>
+                    <circle cx="6.5" cy="16.5" r="2.5"/>
+                    <circle cx="16.5" cy="16.5" r="2.5"/>
+                </svg>
+                <span>EcoNav</span>
+            </div>
+        </div>
+    </nav>
+
+    <div class="hero">
+        <div class="hero-content">
+            <div class="card">
+                <div class="card-blur"></div>
+                <div class="card-content">
+                    <div class="icon-container">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="leaf-icon">
+                            <path d="M2 22c1.25-.987 2.27-1.975 3.9-2.2a5.56 5.56 0 0 1 3.8.9 4 4 0 0 0 4.6 0 5.56 5.56 0 0 1 3.8-.9c1.63.225 2.65 1.213 3.9 2.2"/>
+                            <path d="M2 22c1.25-.987 2.27-1.975 3.9-2.2a5.56 5.56 0 0 1 3.8.9 4 4 0 0 0 4.6 0 5.56 5.56 0 0 1 3.8-.9c1.63.225 2.65 1.213 3.9 2.2"/>
+                            <path d="M2 16c1.25-.987 2.27-1.975 3.9-2.2a5.56 5.56 0 0 1 3.8.9 4 4 0 0 0 4.6 0 5.56 5.56 0 0 1 3.8-.9c1.63.225 2.65 1.213 3.9 2.2"/>
+                        </svg>
+                    </div>
+                    <h1>Smart Routes for Electric Vehicles</h1>
+                    <p>Plan energy-efficient journeys with our intelligent route optimizer designed specifically for electric vehicles.</p>
+                    <button class="start-button">
+                        <span>
+                            Get Started
+                            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="chevron-icon">
+                                <path d="m9 18 6-6-6-6"/>
+                            </svg>
+                        </span>
+                    </button>
+                </div>
+            </div>
+
+            <div class="features">
+                <div class="feature-card">
+                    <h3>Energy Efficient</h3>
+                    <p>Optimize your route for maximum energy efficiency</p>
+                </div>
+                <div class="feature-card">
+                    <h3>Smart Planning</h3>
+                    <p>Real-time updates and charging station locations</p>
+                </div>
+                <div class="feature-card">
+                    <h3>Eco-Friendly</h3>
+                    <p>Reduce your carbon footprint with optimized routes</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const startButton = document.querySelector('.start-button');
+            
+            startButton.addEventListener('click', () => {
+                // Navigate to index.html when the button is clicked
+                window.location.href = 'index.html';
+            });
+        });
+    </script>
+</body>
+</html>

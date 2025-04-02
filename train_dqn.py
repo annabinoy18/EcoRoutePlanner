@@ -9,7 +9,7 @@ from collections import deque
 # ✅ Custom EV Environment (Latitude, Longitude, Battery)
 class EVRouteEnv:
     def __init__(self):
-        self.charge_stations = [(10.0, 76.0), (10.5, 76.5)]  # Example stations (lat, long)
+        self.charge_stations = [(10.0, 76.0), (10.5, 76.5)]  # Example charging stations
         self.destination = (11.0, 77.0)  # Destination
         self.state = [10.0, 76.0, 100, 200]  # [latitude, longitude, battery %, range]
         self.done = False
@@ -44,16 +44,24 @@ class EVRouteEnv:
             else:
                 self.state[2] -= 5  # Penalty for stopping unnecessarily
 
-        # Reward Function
+        # ✅ Improved Reward Function
         distance_before = np.linalg.norm(np.array(prev_state[:2]) - np.array(self.destination))
         distance_after = np.linalg.norm(np.array(self.state[:2]) - np.array(self.destination))
-        reward = 5 if distance_after < distance_before else -5  # Reward moving closer
+        reward = 10 * (distance_before - distance_after)  # Higher reward for moving closer
 
+        # Encourage battery efficiency
         if self.state[2] > 50:
-            reward += 20  # More battery at destination is better
+            reward += 15  
         elif self.state[2] > 20:
-            reward += 10
+            reward += 5  
+        elif self.state[2] < 10:
+            reward -= 20  # Strong penalty for low battery
 
+        # Bonus for reaching charging stations
+        if (self.state[0], self.state[1]) in self.charge_stations:
+            reward += 10  
+
+        # Bonus for reaching destination with battery left
         if (self.state[0], self.state[1]) == self.destination:
             self.done = True
             reward += 100  # Reached goal
@@ -90,10 +98,10 @@ class DQNAgent:
         self.gamma = 0.99  
         self.epsilon = 1.0  
         self.epsilon_min = 0.01
-        self.epsilon_decay = 0.995
+        self.epsilon_decay = 0.997  # 🔥 Slower decay for longer exploration
         self.learning_rate = 0.001
         self.batch_size = 32
-        self.memory = deque(maxlen=5000)  
+        self.memory = deque(maxlen=20000)  # 🔥 Increased replay memory
 
         self.model = DuelingDQN(state_size, action_size)
         self.target_model = DuelingDQN(state_size, action_size)
@@ -151,7 +159,7 @@ state_size = len(env.reset())
 action_size = 3  # (0: Route A, 1: Route B, 2: Charge)
 agent = DQNAgent(state_size, action_size)
 
-EPISODES = 500
+EPISODES = 1000  # 🔥 Train for more episodes
 rewards_list = []
 
 for episode in range(EPISODES):
@@ -159,16 +167,15 @@ for episode in range(EPISODES):
     done = False
     total_reward = 0
     step = 0
-
     prev_reward = 0
 
     while not done:
         action = agent.act(state)
         next_state, reward, done = env.step(action)
 
-         # Apply n-step learning correction
+        # Apply n-step learning correction
         reward += agent.gamma * prev_reward  
-        prev_reward = reward  # Store current reward for next iteration  
+        prev_reward = reward  
 
         agent.remember(state, action, reward, next_state, done)
         state = next_state
@@ -181,8 +188,8 @@ for episode in range(EPISODES):
     if episode % 10 == 0:
         print(f"Episode {episode}, Reward: {total_reward}, Epsilon: {agent.epsilon}")
 
-    if episode % 50 == 0:
-        agent.update_target_model()  # Sync target network
+    if episode % 25 == 0:  # 🔥 More frequent target network updates
+        agent.update_target_model()
 
 # ✅ Save the trained model
 agent.save("dqn_ev_route.pth")

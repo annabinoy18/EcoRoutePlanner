@@ -405,7 +405,7 @@
 
         async function fetchChargingStations(lat, lon) {
             try {
-                const apiKey = "29cbedcb-3ac1-433b-ace7-62d66ebe90fa";
+                const apiKey = "YOUR_OPENSTREETMAP_API_KEY";
                 const response = await fetch(
                     `https://api.openchargemap.io/v3/poi/?output=json&latitude=${lat}&longitude=${lon}&maxresults=5&key=${apiKey}`
                 );

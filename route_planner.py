@@ -40,7 +40,7 @@ model.load_state_dict(torch.load("dqn_ev_route.pth"))
 model.eval()
 
 # ✅ Load Google Maps API Key securely
-GOOGLE_MAPS_API_KEY = "YOUR_GOOGLE_MAP_API_KEY"  # Set this in your environment variables
+GOOGLE_MAPS_API_KEY = "YOUR_GOOGLE_MAPS_API_KEY"  # Set this in your environment variables
 gmaps = googlemaps.Client(key=GOOGLE_MAPS_API_KEY)
 
 def get_routes(start, end):
@@ -78,6 +78,18 @@ def choose_best_route(routes, battery, range_km):
             best_route = route
     return best_route if best_route else routes[0]  # ✅ Fallback to first valid route
 
+def geocode_location(location):
+    """Convert a location name to coordinates using Google Maps Geocoding API."""
+    try:
+        geocode_result = gmaps.geocode(location)
+        if not geocode_result:
+            return None
+        location = geocode_result[0]['geometry']['location']
+        return f"{location['lat']},{location['lng']}"
+    except Exception as e:
+        print(f"Geocoding error: {str(e)}")
+        return None
+
 @app.route('/plan_route', methods=['POST'])
 def plan_route():
     try:
@@ -86,8 +98,21 @@ def plan_route():
         if not data:
             return jsonify({"error": "Invalid JSON input"}), 400
 
-        start = f"{data['startLatitude']},{data['startLongitude']}"
-        end = f"{data['destLatitude']},{data['destLongitude']}"
+        # Handle both coordinate and location name inputs
+        if 'startLocation' in data:
+            start = geocode_location(data['startLocation'])
+            if not start:
+                return jsonify({"error": "Could not find start location"}), 400
+        else:
+            start = f"{data['startLatitude']},{data['startLongitude']}"
+
+        if 'destLocation' in data:
+            end = geocode_location(data['destLocation'])
+            if not end:
+                return jsonify({"error": "Could not find destination location"}), 400
+        else:
+            end = f"{data['destLatitude']},{data['destLongitude']}"
+
         battery = float(data['battery'])
         range_km = float(data['range'])
 

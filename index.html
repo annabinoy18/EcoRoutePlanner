@@ -4,13 +4,11 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>EcoNav - EV Route Planner</title>
-     <!-- Leaflet Maps & Routing -->
-     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet-routing-machine/3.2.12/leaflet-routing-machine.css" />
-     <script src="https://unpkg.com/leaflet-routing-machine@3.2.12/dist/leaflet-routing-machine.min.js"></script>
-     <!-- Google Places API 
-     <script src="https://maps.googleapis.com/maps/api/js?key=YOUR_API_KEY&libraries=places&callback=initMap" async defer></script>-->
+    <!-- Leaflet Maps & Routing -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet-routing-machine/3.2.12/leaflet-routing-machine.css" />
+    <script src="https://unpkg.com/leaflet-routing-machine@3.2.12/dist/leaflet-routing-machine.min.js"></script>
     <style>
         :root {
             --primary-blue: #3B82F6;
@@ -247,8 +245,57 @@
             height: 100%;
         }
 
-        #googleMap {
-            display: none;
+        .charging-stations-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 1rem;
+            margin-top: 1.5rem;
+            padding: 1rem;
+            background: var(--gray-50);
+            border-radius: 0.75rem;
+            border: 1px solid var(--gray-200);
+        }
+
+        .station-card {
+            background: white;
+            border-radius: 0.5rem;
+            padding: 1rem;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+            border: 1px solid var(--gray-200);
+        }
+
+        .station-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            border-color: var(--primary-blue);
+        }
+
+        .station-card h3 {
+            color: var(--primary-dark);
+            font-size: 1rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .station-card p {
+            color: var(--gray-700);
+            font-size: 0.875rem;
+            margin-bottom: 0.25rem;
+        }
+
+        .station-card .distance {
+            color: var(--success-green);
+            font-weight: 600;
+        }
+
+        .station-card .points {
+            display: inline-block;
+            background: var(--success-light);
+            color: var(--success-hover);
+            padding: 0.25rem 0.5rem;
+            border-radius: 0.25rem;
+            font-size: 0.75rem;
+            margin-top: 0.5rem;
         }
 
         .icon {
@@ -325,7 +372,7 @@
                     </div>
                     <button type="button" class="btn-primary" onclick="planRoute()">Plan Route</button>
                 </div>
-
+                
                 <div id="routeInfo" class="route-info" style="display: none;"></div>
                 <div id="warning" class="warning" style="display: none;"></div>
                 <div id="error" class="error" style="display: none;"></div>
@@ -343,12 +390,12 @@
 
         <div class="card map-container">
             <div id="map"></div>
-            <div id="googleMap"></div>
+            <div id="chargingStationsGrid" class="charging-stations-grid" style="display: none;"></div>
         </div>
     </div>
 
-    
     <script>
+        // Initialize map
         let map;
         let routeControl;
         let startMarker;
@@ -360,10 +407,12 @@
         function initMap() {
             // Initialize Leaflet map
             map = L.map('map').setView([51.505, -0.09], 13);
+            
+            // Add OpenStreetMap tiles
             L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
                 attribution: '© OpenStreetMap contributors'
             }).addTo(map);
-
+            
             // Configure routing machine with OSRM
             L.Routing.control({
                 serviceUrl: 'https://router.project-osrm.org/route/v1',
@@ -390,7 +439,7 @@
             const destLocation = document.getElementById('destLocation').value.trim();
             const battery = document.getElementById('battery').value;
             const range = document.getElementById('range').value;
-
+            
             // Validate inputs
             if (!startLocation || !destLocation) {
                 const errorDiv = document.getElementById('error');
@@ -398,7 +447,7 @@
                 errorDiv.style.display = 'block';
                 return;
             }
-
+            
             if (battery < 0 || battery > 100) {
                 const errorDiv = document.getElementById('error');
                 errorDiv.textContent = 'Battery level must be between 0 and 100%';
@@ -577,10 +626,10 @@
             const points = [];
             const totalSteps = steps.length;
             
-            // Add points at regular intervals along the route
+            // Add more points along the route (every 20km or so)
             for (let i = 0; i < totalSteps; i++) {
                 const step = steps[i];
-                if (i % Math.max(1, Math.floor(totalSteps / 5)) === 0) { // Get ~5 points along the route
+                if (i % Math.max(1, Math.floor(totalSteps / 10)) === 0) { // Get ~10 points along the route
                     points.push({
                         lat: step.start_location.lat,
                         lng: step.start_location.lng
@@ -591,30 +640,62 @@
             return points;
         }
 
-        // Function to fetch charging stations along the route
+        // Function to fetch charging stations
         async function fetchChargingStationsAlongRoute(points) {
             try {
-                // Create a Set to track unique station IDs
-                const processedStations = new Set();
+                const stationsGrid = document.getElementById('chargingStationsGrid');
+                stationsGrid.innerHTML = '';
+                stationsGrid.style.display = 'none';
                 
-                // Process all points in parallel
-                const results = await Promise.all(
+                const uniqueStations = new Map();
+                
+                // Search at each point along the route
+                const routeResults = await Promise.all(
                     points.map(point => 
-                        fetch(`https://api.openchargemap.io/v3/poi/?output=json&latitude=${point.lat}&longitude=${point.lng}&distance=10&distanceunit=KM&maxresults=5&key=YOUR_OSM_API`)
+                        fetch(`https://api.openchargemap.io/v3/poi/?output=json&latitude=${point.lat}&longitude=${point.lng}&distance=15&distanceunit=KM&maxresults=10&key=YOUR_OSM_KEY`)
                         .then(response => response.json())
                     )
                 );
+
+                // Also search at start and end points with a larger radius
+                const startPoint = points[0];
+                const endPoint = points[points.length - 1];
                 
-                // Process all results
-                results.flat().forEach(station => {
+                const [startResults, endResults] = await Promise.all([
+                    fetch(`https://api.openchargemap.io/v3/poi/?output=json&latitude=${startPoint.lat}&longitude=${startPoint.lng}&distance=25&distanceunit=KM&maxresults=15&key=29cbedcb-3ac1-433b-ace7-62d66ebe90fa`)
+                        .then(response => response.json()),
+                    fetch(`https://api.openchargemap.io/v3/poi/?output=json&latitude=${endPoint.lat}&longitude=${endPoint.lng}&distance=25&distanceunit=KM&maxresults=15&key=29cbedcb-3ac1-433b-ace7-62d66ebe90fa`)
+                        .then(response => response.json())
+                ]);
+
+                // Combine all results
+                const allResults = [...routeResults.flat(), ...startResults, ...endResults];
+                
+                allResults.forEach(station => {
                     const location = station.AddressInfo;
                     const stationId = station.ID;
                     
-                    // Only process if we haven't seen this station before
                     if (!existingStations.has(stationId)) {
                         existingStations.add(stationId);
                         
-                        // Create marker with custom popup
+                        // Add to unique stations map
+                        uniqueStations.set(stationId, {
+                            id: stationId,
+                            title: location.Title,
+                            address: location.AddressLine1 || '',
+                            town: location.Town || '',
+                            state: location.StateOrProvince || '',
+                            points: station.NumberOfPoints,
+                            usageType: station.UsageType?.Title || '',
+                            distance: location.Distance,
+                            lat: location.Latitude,
+                            lng: location.Longitude,
+                            isNearStart: location.Distance <= 25 && 
+                                L.latLng(location.Latitude, location.Longitude).distanceTo(L.latLng(startPoint.lat, startPoint.lng)) <= 25000,
+                            isNearEnd: location.Distance <= 25 && 
+                                L.latLng(location.Latitude, location.Longitude).distanceTo(L.latLng(endPoint.lat, endPoint.lng)) <= 25000
+                        });
+                        
                         const marker = L.marker([location.Latitude, location.Longitude], {
                             icon: L.icon({
                                 iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-green.png',
@@ -636,6 +717,41 @@
                         `);
                     }
                 });
+
+                // Sort stations by distance and location
+                const sortedStations = Array.from(uniqueStations.values())
+                    .sort((a, b) => {
+                        // Prioritize stations near start and end points
+                        if (a.isNearStart && !b.isNearStart) return -1;
+                        if (!a.isNearStart && b.isNearStart) return 1;
+                        if (a.isNearEnd && !b.isNearEnd) return -1;
+                        if (!a.isNearEnd && b.isNearEnd) return 1;
+                        // Then sort by distance
+                        return a.distance - b.distance;
+                    });
+
+                // Create station cards
+                if (sortedStations.length > 0) {
+                    stationsGrid.style.display = 'grid';
+                    sortedStations.forEach(station => {
+                        const card = document.createElement('div');
+                        card.className = 'station-card';
+                        let locationInfo = '';
+                        if (station.isNearStart) locationInfo = '<span class="points" style="background: var(--primary-light); color: var(--primary-dark);">Near Start</span>';
+                        else if (station.isNearEnd) locationInfo = '<span class="points" style="background: var(--primary-light); color: var(--primary-dark);">Near End</span>';
+                        
+                        card.innerHTML = `
+                            <h3>${station.title}</h3>
+                            <p>${station.address}</p>
+                            <p>${station.town}${station.state ? `, ${station.state}` : ''}</p>
+                            ${locationInfo}
+                            ${station.points ? `<span class="points">${station.points} Charging Points</span>` : ''}
+                            ${station.usageType ? `<p>Usage: ${station.usageType}</p>` : ''}
+                            <p class="distance">${station.distance.toFixed(1)} km from route</p>
+                        `;
+                        stationsGrid.appendChild(card);
+                    });
+                }
             } catch (error) {
                 console.error('Error fetching charging stations:', error);
             }

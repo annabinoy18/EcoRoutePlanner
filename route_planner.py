@@ -40,7 +40,7 @@ model.load_state_dict(torch.load("dqn_ev_route.pth"))
 model.eval()
 
 # ✅ Load Google Maps API Key securely
-GOOGLE_MAPS_API_KEY = "YOUR_GOOGLE_MAPS_API_KEY"  # Set this in your environment variables
+GOOGLE_MAPS_API_KEY = "YOUR_GOOGLE_API_KEY"  # Set this in your environment variables
 gmaps = googlemaps.Client(key=GOOGLE_MAPS_API_KEY)
 
 def get_routes(start, end):

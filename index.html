@@ -9,6 +9,8 @@
      <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
      <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet-routing-machine/3.2.12/leaflet-routing-machine.css" />
      <script src="https://unpkg.com/leaflet-routing-machine@3.2.12/dist/leaflet-routing-machine.min.js"></script>
+     <!-- Google Places API 
+     <script src="https://maps.googleapis.com/maps/api/js?key=YOUR_API_KEY&libraries=places&callback=initMap" async defer></script>-->
     <style>
         :root {
             --primary-blue: #3B82F6;
@@ -245,6 +247,10 @@
             height: 100%;
         }
 
+        #googleMap {
+            display: none;
+        }
+
         .icon {
             width: 20px;
             height: 20px;
@@ -298,82 +304,34 @@
 
             <form id="routeForm">
                 <div class="form-section">
-                    <h2>
-                        <svg class="icon">
-                            <circle cx="12" cy="12" r="10"></circle>
-                            <path d="M12 8v8"></path>
-                            <path d="M8 12h8"></path>
-                        </svg>
-                        Starting Point
-                    </h2>
+                    <h2>Route Details</h2>
                     <div class="form-grid">
                         <div class="input-group">
-                            <label for="startLatitude">Latitude</label>
-                            <input type="number" id="startLatitude" step="any" required>
+                            <label for="startLocation">Start Location</label>
+                            <input type="text" id="startLocation" placeholder="Enter start location name">
                         </div>
                         <div class="input-group">
-                            <label for="startLongitude">Longitude</label>
-                            <input type="number" id="startLongitude" step="any" required>
+                            <label for="destLocation">Destination</label>
+                            <input type="text" id="destLocation" placeholder="Enter destination name">
                         </div>
-                    </div>
-                </div>
-
-                <div class="form-section">
-                    <h2>
-                        <svg class="icon">
-                            <polygon points="3 11 22 2 13 21 11 13 3 11"></polygon>
-                        </svg>
-                        Destination
-                    </h2>
-                    <div class="form-grid">
-                        <div class="input-group">
-                            <label for="destLatitude">Latitude</label>
-                            <input type="number" id="destLatitude" step="any" required>
-                        </div>
-                        <div class="input-group">
-                            <label for="destLongitude">Longitude</label>
-                            <input type="number" id="destLongitude" step="any" required>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="form-section">
-                    <h2>
-                        <svg class="icon">
-                            <path d="M23 11h-3a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h3"></path>
-                            <path d="M3 11h3a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2H3"></path>
-                            <path d="M23 13h-3a2 2 0 0 0-2 2v3a2 2 0 0 0 2 2h3"></path>
-                            <path d="M3 13h3a2 2 0 0 1 2 2v3a2 2 0 0 1-2 2H3"></path>
-                            <path d="M12 14h.01"></path>
-                            <path d="M12 10h.01"></path>
-                        </svg>
-                        Vehicle Details
-                    </h2>
-                    <div class="form-grid">
                         <div class="input-group">
                             <label for="battery">Battery Level (%)</label>
-                            <input type="number" id="battery" min="0" max="100" required>
+                            <input type="number" id="battery" min="0" max="100" value="100">
                         </div>
                         <div class="input-group">
-                            <label for="range">Range (km)</label>
-                            <input type="number" id="range" min="0" required>
+                            <label for="range">Vehicle Range (km)</label>
+                            <input type="number" id="range" min="0" value="400">
                         </div>
                     </div>
+                    <button type="button" class="btn-primary" onclick="planRoute()">Plan Route</button>
                 </div>
 
-                <button type="submit" class="btn-primary">
-                    <svg class="icon">
-                        <polygon points="3 11 22 2 13 21 11 13 3 11"></polygon>
-                    </svg>
-                    Plan Route
-                </button>
+                <div id="routeInfo" class="route-info" style="display: none;"></div>
+                <div id="warning" class="warning" style="display: none;"></div>
+                <div id="error" class="error" style="display: none;"></div>
             </form>
 
-            <div id="routeInfo" class="route-info" style="display: none;"></div>
-            <div id="warning" class="warning" style="display: none;"></div>
-            <div id="error" class="error" style="display: none;"></div>
-
-            <button id="readDirections" class="btn-success" style="display: none;">
+            <button id="readDirections" class="btn-success" style="display: none;" type="button">
                 <svg class="icon">
                     <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
                     <path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path>
@@ -385,176 +343,329 @@
 
         <div class="card map-container">
             <div id="map"></div>
+            <div id="googleMap"></div>
         </div>
     </div>
 
     
     <script>
         let map;
-        let routeLayer;
+        let routeControl;
+        let startMarker;
+        let endMarker;
         let directionsText = '';
         let isReading = false;
+        let existingStations = new Set();
 
-        // Initialize map
-        document.addEventListener('DOMContentLoaded', () => {
+        function initMap() {
+            // Initialize Leaflet map
             map = L.map('map').setView([51.505, -0.09], 13);
             L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
                 attribution: '© OpenStreetMap contributors'
             }).addTo(map);
-        });
 
-        async function fetchChargingStations(lat, lon) {
+            // Configure routing machine with OSRM
+            L.Routing.control({
+                serviceUrl: 'https://router.project-osrm.org/route/v1',
+                profile: 'car',
+                addWaypoints: false,
+                draggableWaypoints: false,
+                routeWhileDragging: true,
+                show: true,
+                createMarker: function() { return null; },
+                lineOptions: {
+                    styles: [{ color: '#3B82F6', weight: 5, opacity: 0.7 }]
+                }
+            }).addTo(map);
+        }
+
+        function planRoute() {
+            // Clear any previous messages
+            document.getElementById('error').style.display = 'none';
+            document.getElementById('warning').style.display = 'none';
+            document.getElementById('routeInfo').style.display = 'none';
+            document.getElementById('readDirections').style.display = 'none';
+
+            const startLocation = document.getElementById('startLocation').value.trim();
+            const destLocation = document.getElementById('destLocation').value.trim();
+            const battery = document.getElementById('battery').value;
+            const range = document.getElementById('range').value;
+
+            // Validate inputs
+            if (!startLocation || !destLocation) {
+                const errorDiv = document.getElementById('error');
+                errorDiv.textContent = 'Please enter both start and destination locations';
+                errorDiv.style.display = 'block';
+                return;
+            }
+
+            if (battery < 0 || battery > 100) {
+                const errorDiv = document.getElementById('error');
+                errorDiv.textContent = 'Battery level must be between 0 and 100%';
+                errorDiv.style.display = 'block';
+                return;
+            }
+
+            if (range <= 0) {
+                const errorDiv = document.getElementById('error');
+                errorDiv.textContent = 'Vehicle range must be greater than 0';
+                errorDiv.style.display = 'block';
+                return;
+            }
+
+            const data = {
+                startLocation: startLocation,
+                destLocation: destLocation,
+                battery: parseFloat(battery),
+                range: parseFloat(range)
+            };
+
+            // Show loading state
+            const button = document.querySelector('.btn-primary');
+            const originalText = button.textContent;
+            button.textContent = 'Planning Route...';
+            button.disabled = true;
+
+            fetch('http://localhost:5000/plan_route', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(data)
+            })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                return response.json();
+            })
+            .then(data => {
+                if (data.error) {
+                    throw new Error(data.error);
+                }
+                displayRoute(data);
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                const errorDiv = document.getElementById('error');
+                errorDiv.textContent = error.message || 'An error occurred while planning the route';
+                errorDiv.style.display = 'block';
+            })
+            .finally(() => {
+                // Restore button state
+                button.textContent = originalText;
+                button.disabled = false;
+            });
+        }
+
+        async function displayRoute(routeData) {
             try {
-                const apiKey = "YOUR_OPENSTREETMAP_API_KEY";
-                const response = await fetch(
-                    `https://api.openchargemap.io/v3/poi/?output=json&latitude=${lat}&longitude=${lon}&maxresults=5&key=${apiKey}`
-                );
-                const data = await response.json();
+                // Clear any existing route and markers
+                if (routeControl) {
+                    map.removeControl(routeControl);
+                }
+                if (startMarker) {
+                    map.removeLayer(startMarker);
+                }
+                if (endMarker) {
+                    map.removeLayer(endMarker);
+                }
                 
-                data.forEach(station => {
+                // Clear existing charging station markers if any
+                clearChargingStations();
+                clearExistingStations();
+
+                // Create waypoints array
+                const waypoints = [];
+                if (routeData.steps && routeData.steps.length > 0) {
+                    // Add start point
+                    const startPoint = routeData.steps[0].start_location;
+                    waypoints.push(L.latLng(startPoint.lat, startPoint.lng));
+                    
+                    // Add end point
+                    const endPoint = routeData.steps[routeData.steps.length - 1].end_location;
+                    waypoints.push(L.latLng(endPoint.lat, endPoint.lng));
+
+                    // Add markers
+                    startMarker = L.marker([startPoint.lat, startPoint.lng])
+                        .addTo(map)
+                        .bindPopup('Start');
+                    
+                    endMarker = L.marker([endPoint.lat, endPoint.lng])
+                        .addTo(map)
+                        .bindPopup('Destination');
+
+                    // Fit map to show the entire route
+                    const bounds = L.latLngBounds(waypoints);
+                    map.fitBounds(bounds, { padding: [50, 50] });
+
+                    // Fetch charging stations along the route immediately
+                    const routePoints = calculateRoutePoints(routeData.steps);
+                    await fetchChargingStationsAlongRoute(routePoints);
+                }
+
+                // Create route control with directions visible
+                routeControl = L.Routing.control({
+                    waypoints: waypoints,
+                    routeWhileDragging: true,
+                    show: true,
+                    createMarker: function(i, waypoint) {
+                        return null; // We're handling markers separately
+                    },
+                    lineOptions: {
+                        styles: [{ color: '#3B82F6', weight: 5, opacity: 0.7 }]
+                    }
+                }).addTo(map);
+
+                // Listen for the route calculation to complete
+                routeControl.on('routesfound', function(e) {
+                    const routes = e.routes;
+                    if (routes && routes.length > 0) {
+                        // Build the directions text
+                        directionsText = 'Starting route guidance. ';
+                        routes[0].instructions.forEach((instruction, index) => {
+                            const cleanInstruction = instruction.text
+                                .replace(/\([^)]*\)/g, '') // Remove text in parentheses
+                                .replace(/<[^>]*>/g, ''); // Remove HTML tags
+                            directionsText += `Step ${index + 1}: ${cleanInstruction}. `;
+                            if (instruction.distance) {
+                                directionsText += `Continue for ${(instruction.distance / 1000).toFixed(2)} kilometers. `;
+                            }
+                        });
+                        directionsText += 'You have reached your destination.';
+                    }
+                });
+
+                // Update route info display
+                const routeInfo = document.getElementById('routeInfo');
+                routeInfo.innerHTML = `
+                    <h3>Route Details</h3>
+                    <p>Distance: ${routeData.distance.toFixed(1)} km</p>
+                    <p>Duration: ${routeData.duration}</p>
+                    <p>Battery Usage: ${routeData.battery_usage.toFixed(1)}%</p>
+                `;
+                routeInfo.style.display = 'block';
+                document.getElementById('readDirections').style.display = 'flex';
+
+                // Check battery level and show warning if needed
+                const currentBattery = parseFloat(document.getElementById('battery').value);
+                if (routeData.battery_usage > currentBattery) {
+                    const warningDiv = document.getElementById('warning');
+                    warningDiv.textContent = 'Warning: Insufficient battery for the trip. Showing available charging stations along the route.';
+                    warningDiv.style.display = 'block';
+                }
+
+            } catch (error) {
+                console.error('Error displaying route:', error);
+                const errorDiv = document.getElementById('error');
+                errorDiv.textContent = 'Error displaying route. Please try again.';
+                errorDiv.style.display = 'block';
+            }
+        }
+
+        // Function to clear existing charging station markers
+        function clearChargingStations() {
+            map.eachLayer((layer) => {
+                if (layer instanceof L.Marker && layer !== startMarker && layer !== endMarker) {
+                    map.removeLayer(layer);
+                }
+            });
+        }
+
+        // Function to calculate points along the route
+        function calculateRoutePoints(steps) {
+            const points = [];
+            const totalSteps = steps.length;
+            
+            // Add points at regular intervals along the route
+            for (let i = 0; i < totalSteps; i++) {
+                const step = steps[i];
+                if (i % Math.max(1, Math.floor(totalSteps / 5)) === 0) { // Get ~5 points along the route
+                    points.push({
+                        lat: step.start_location.lat,
+                        lng: step.start_location.lng
+                    });
+                }
+            }
+            
+            return points;
+        }
+
+        // Function to fetch charging stations along the route
+        async function fetchChargingStationsAlongRoute(points) {
+            try {
+                // Create a Set to track unique station IDs
+                const processedStations = new Set();
+                
+                // Process all points in parallel
+                const results = await Promise.all(
+                    points.map(point => 
+                        fetch(`https://api.openchargemap.io/v3/poi/?output=json&latitude=${point.lat}&longitude=${point.lng}&distance=10&distanceunit=KM&maxresults=5&key=YOUR_OSM_API`)
+                        .then(response => response.json())
+                    )
+                );
+                
+                // Process all results
+                results.flat().forEach(station => {
                     const location = station.AddressInfo;
-                    L.marker([location.Latitude, location.Longitude])
+                    const stationId = station.ID;
+                    
+                    // Only process if we haven't seen this station before
+                    if (!existingStations.has(stationId)) {
+                        existingStations.add(stationId);
+                        
+                        // Create marker with custom popup
+                        const marker = L.marker([location.Latitude, location.Longitude], {
+                            icon: L.icon({
+                                iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-green.png',
+                                shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
+                                iconSize: [25, 41],
+                                iconAnchor: [12, 41],
+                                popupAnchor: [1, -34],
+                                shadowSize: [41, 41]
+                            })
+                        })
                         .addTo(map)
                         .bindPopup(`
                             <strong>${location.Title}</strong><br>
-                            ${location.AddressLine1}
+                            ${location.AddressLine1 || ''}<br>
+                            ${location.Town || ''}, ${location.StateOrProvince || ''}<br>
+                            ${station.NumberOfPoints ? `Number of Points: ${station.NumberOfPoints}<br>` : ''}
+                            ${station.UsageType ? `Usage Type: ${station.UsageType.Title}<br>` : ''}
+                            ${location.Distance ? `Distance: ${location.Distance.toFixed(1)} km` : ''}
                         `);
+                    }
                 });
             } catch (error) {
                 console.error('Error fetching charging stations:', error);
             }
         }
 
-        document.getElementById('routeForm').addEventListener('submit', async (e) => {
-            e.preventDefault();
-            
-            const errorDiv = document.getElementById('error');
-            const routeInfo = document.getElementById('routeInfo');
-            const warningDiv = document.getElementById('warning');
-            const readDirectionsBtn = document.getElementById('readDirections');
-            
-            errorDiv.style.display = 'none';
-            routeInfo.style.display = 'none';
-            warningDiv.style.display = 'none';
-            readDirectionsBtn.style.display = 'none';
+        // Clear existing stations when starting a new route
+        function clearExistingStations() {
+            existingStations.clear();
+        }
 
-            if (routeLayer) {
-                map.removeLayer(routeLayer);
-            }
+        // Initialize map when page loads
+        window.onload = initMap;
 
-            const formData = {
-                startLatitude: parseFloat(document.getElementById('startLatitude').value),
-                startLongitude: parseFloat(document.getElementById('startLongitude').value),
-                destLatitude: parseFloat(document.getElementById('destLatitude').value),
-                destLongitude: parseFloat(document.getElementById('destLongitude').value),
-                battery: parseFloat(document.getElementById('battery').value),
-                range: parseFloat(document.getElementById('range').value)
-            };
-
-            try {
-                const response = await fetch('http://127.0.0.1:5000/plan_route', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Accept': 'application/json'
-                    },
-                    body: JSON.stringify(formData)
-                });
-
-                if (!response.ok) {
-                    const errorData = await response.json();
-                    throw new Error(errorData.error || 'Failed to fetch route');
-                }
-
-                const data = await response.json();
-
-                routeInfo.innerHTML = `
-                    <h3>Route Details</h3>
-                    <p>Distance: ${data.distance.toFixed(2)} km</p>
-                    <p>Duration: ${data.duration}</p>
-                    <p>Battery Usage: ${data.battery_usage.toFixed(2)}%</p>
-                `;
-                routeInfo.style.display = 'block';
-
-                directionsText = data.steps
-                    .map(step => step.instructions.replace(/<[^>]*>/g, ''))
-                    .join(' ');
-
-                // Add markers and route
-                const startMarker = L.marker([formData.startLatitude, formData.startLongitude])
-                    .addTo(map)
-                    .bindPopup('Start');
-                
-                const endMarker = L.marker([formData.destLatitude, formData.destLongitude])
-                    .addTo(map)
-                    .bindPopup('Destination');
-
-                const bounds = L.latLngBounds(
-                    [formData.startLatitude, formData.startLongitude],
-                    [formData.destLatitude, formData.destLongitude]
-                );
-                map.fitBounds(bounds, { padding: [50, 50] });
-
-                function getMidpoint(lat1, lon1, lat2, lon2) {
-                    let midLat = (lat1 + lat2) / 2;
-                    let midLon = (lon1 + lon2) / 2;
-                    return { latitude: midLat, longitude: midLon };
-                }
-
-                // Check battery and fetch charging stations
-                if (data.battery_usage > formData.battery) {
-                    warningDiv.textContent = 'Warning: Insufficient battery for the trip. Consider charging your vehicle along the way.';
-                    warningDiv.style.display = 'block';
-
-                    // Fetch for Start & Destination
-                    await fetchChargingStations(formData.startLatitude, formData.startLongitude);
-                    await fetchChargingStations(formData.destLatitude, formData.destLongitude);
-
-                    // Calculate Midpoints
-                    let M1 = getMidpoint(formData.startLatitude, formData.startLongitude, formData.destLatitude, formData.destLongitude);
-                    let M2 = getMidpoint(formData.destLatitude, formData.destLongitude, M1.latitude, M1.longitude);
-                    let M3 = getMidpoint(formData.startLatitude, formData.startLongitude, M1.latitude, M1.longitude);
-
-                    // Fetch Charging Stations at Midpoints
-                    await fetchChargingStations(M1.latitude, M1.longitude);
-                    await fetchChargingStations(M2.latitude, M2.longitude);
-                    await fetchChargingStations(M3.latitude, M3.longitude);
-                }
-                
-                if (data.steps && data.steps.length > 0) {
-                    if (routeLayer) {
-                        map.removeControl(routeLayer); // Remove previous route if exists
-                    }
-                    console.log(L,L.Routing);
-
-                    routeLayer = L.Routing.control({
-                        waypoints: [
-                            L.latLng(formData.startLatitude, formData.startLongitude),
-                            L.latLng(formData.destLatitude, formData.destLongitude)
-                        ],
-                        routeWhileDragging: true,
-                        createMarker: function(i, waypoint) {
-                            return L.marker(waypoint.latLng).bindPopup(i === 0 ? "Starting Point" : "Destination");
-                        },
-                        lineOptions: {
-                            styles: [{ color: '#3B82F6', weight: 5, opacity: 0.7 }]
-                        }
-                    }).addTo(map);
-                }
-                readDirectionsBtn.style.display = 'flex';
-
-            } catch (error) {
-                errorDiv.textContent = error.message;
-                errorDiv.style.display = 'block';
-                console.error('Error:', error);
-            }
-        });
-
-        document.getElementById('readDirections').addEventListener('click', () => {
+        document.getElementById('readDirections').addEventListener('click', function(e) {
+            e.preventDefault(); // Prevent any default action
             const btn = document.getElementById('readDirections');
             
             if (!isReading && directionsText) {
                 const utterance = new SpeechSynthesisUtterance(directionsText);
+                utterance.onend = function() {
+                    isReading = false;
+                    btn.innerHTML = `
+                        <svg class="icon">
+                            <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
+                            <path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path>
+                            <path d="M19.07 4.93a10 10 0 0 1 0 14.14"></path>
+                        </svg>
+                        Read Directions
+                    `;
+                };
                 window.speechSynthesis.speak(utterance);
                 isReading = true;
                 btn.innerHTML = `
